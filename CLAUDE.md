@@ -23,7 +23,7 @@ Use generic, obviously-fake examples instead: "Main Credit Card", "Corner Deli",
 
 ### Testing & Validation
 - `uv run pytest tests/ -v --tb=short` - Run all tests
-- `uv run python -m mypy server.py --config-file pyproject.toml` - Type checking
+- `uv run mypy server.py` - Type checking
 - `uv run ruff check .` - Lint
 - `uv run ruff format --check .` - Format check (use `ruff format .` to auto-fix)
 - `uv run python server.py` - Test server directly (all logs to stderr)
@@ -86,15 +86,12 @@ tail -f /Users/jamie/Library/Logs/Claude/mcp-server-monarch-money.log | grep "\[
 
 ### Git Commit Standards
 
-**Pre-push check (mirrors CI — run before pushing):**
+**Pre-push check (mirrors CI):**
 ```bash
-uv run ruff check .                                        # lint
-uv run ruff format --check .                               # format
-uv run python -m mypy server.py --config-file pyproject.toml  # types
-uv run pytest tests/ -v --tb=short                         # tests
+./scripts/ci.sh
 ```
 
-All four must pass. CI runs these on Python 3.10–3.13 against every PR to main.
+This runs lint, format check, type check, and tests — the same checks as `.github/workflows/ci.yml`. CI runs these on Python 3.10–3.13 against every PR to main.
 
 **Commit Message Format:**
 ```
