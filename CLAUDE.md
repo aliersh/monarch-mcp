@@ -88,10 +88,10 @@ tail -f /Users/jamie/Library/Logs/Claude/mcp-server-monarch-money.log | grep "\[
 
 **Pre-push check (mirrors CI):**
 ```bash
-./scripts/ci.sh
+uv run python scripts/ci.py
 ```
 
-This runs lint, format check, type check, and tests — the same checks as `.github/workflows/ci.yml`. CI runs these on Python 3.10–3.13 against every PR to main.
+This runs ruff check, ruff format, mypy, and pytest — the same checks as `.github/workflows/ci.yml`. CI runs these on Python 3.10–3.13 against every PR to main.
 
 **Commit Message Format:**
 ```

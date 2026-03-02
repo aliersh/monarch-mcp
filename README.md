@@ -131,11 +131,12 @@ uv run pytest tests/test_integration.py -v        # integration tests (needs .en
 uv run scripts/health_check.py                    # quick API connectivity check
 ```
 
-### Type checking and linting
+### CI checks
+
+Run all checks locally (same as GitHub Actions CI):
 
 ```bash
-uv run mypy server.py
-uv run ruff check .
+uv run python scripts/ci.py
 ```
 
 ### Log analysis
@@ -164,4 +165,4 @@ uv run scripts/eval_session.py analyze            # analyze new entries
 
 This project started as a fork of [colvint/monarch-money-mcp](https://github.com/colvint/monarch-money-mcp) by [@colvint](https://github.com/colvint). Thanks for the original implementation!
 
-Built on the [monarchmoney](https://github.com/hammem/monarchmoney) Python library by [@hammem](https://github.com/hammem), using the [community fork](https://github.com/bradleyseanf/monarchmoneycommunity) which tracks the latest API changes.
+Built with the [MonarchMoney](https://github.com/hammem/monarchmoney) Python library by [@hammem](https://github.com/hammem) — a fantastic unofficial API for Monarch Money with full MFA support. We currently use the [community fork](https://github.com/bradleyseanf/monarchmoneycommunity) by [@bradleyseanf](https://github.com/bradleyseanf) which tracks the latest Monarch Money API changes.
