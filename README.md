@@ -124,8 +124,8 @@ The compact format is perfect for most queries and looks like:
 ```json
 {
   "id": "123456789012345678",
-  "date": "2025-08-24",
-  "amount": -8.49,
+  "date": "2025-03-15",
+  "amount": -12.50,
   "merchant": "Corner Deli",
   "plaidName": "CORNER DELI NYC",
   "category": "Restaurants & Bars",
