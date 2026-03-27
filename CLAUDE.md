@@ -171,10 +171,10 @@ refactor: split server.py into modular components (auth, tools, models)
 - Structured logging with `structlog` for debugging
 - Environment variables: `MONARCH_EMAIL`, `MONARCH_PASSWORD`, `MONARCH_MFA_SECRET`
 
-**Complete Monarch Money API Coverage (22 Tools)**
+**Complete Monarch Money API Coverage (24 Tools)**
 - **Core**: `get_accounts`, `get_transactions`, `get_budgets`, `get_cashflow`
 - **Categories**: `get_transaction_categories`
-- **Transactions**: `create_transaction`, `update_transaction`, `update_transactions_bulk`, `search_transactions`
+- **Transactions**: `create_transaction`, `update_transaction`, `update_transactions_bulk`, `search_transactions`, `get_transaction_splits`, `split_transaction`
 - **Investments**: `get_account_holdings`, `get_account_history`
 - **Banking**: `get_institutions`, `refresh_accounts`
 - **Planning**: `get_recurring_transactions`, `set_budget_amount`
@@ -400,7 +400,7 @@ Server runs as MCP server configured in `.mcp.json` with:
 5. **Phase 5 (Intelligence)**: ML features, advanced analytics, financial insights
 6. **Phase 6 (Ecosystem)**: MCP extensions, developer tools, architectural improvements
 
-**Current Status** (Updated October 2025): Production-ready with 70 passing tests, 22 intelligent tools, comprehensive analytics, robust error handling, and enhanced reliability. Recent features: `update_transactions_bulk()` for parallel batch updates, `search_transactions` tool for efficient context-aware search, detailed tool call debugging with result size tracking. Recent critical fixes completed: authentication retry bug (stale client after re-auth), date serialization, broken pipe handling, dependency updates, and enhanced date parsing. Server is stable and ready for real-world usage with excellent user experience for date filtering, bulk operations, and error recovery.
+**Current Status** (Updated March 2026): Production-ready with 24 intelligent tools, comprehensive analytics, robust error handling, and enhanced reliability. Recent additions: `get_transaction_splits` and `split_transaction` tools for full split transaction support (read and create/update/delete splits). Previous features: `update_transactions_bulk()` for parallel batch updates, `search_transactions` tool for efficient context-aware search. Server is stable and ready for real-world usage with excellent user experience for date filtering, bulk operations, split transactions, and error recovery.
 
 ## Documentation References
 

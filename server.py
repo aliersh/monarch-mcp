@@ -1608,6 +1608,157 @@ async def update_transactions_bulk(updates: str) -> str:
 
 @mcp.tool(annotations=READONLY)
 @track_usage
+async def get_transaction_splits(transaction_id: str) -> str:
+    """Get split transaction details for a transaction.
+
+    Returns the parent transaction info and any splits associated with it.
+    If the transaction has no splits, splitTransactions will be an empty array.
+
+    Args:
+        transaction_id: ID of the parent transaction to retrieve splits for
+
+    Returns:
+        JSON string with parent transaction (id, amount, category, merchant) and
+        splitTransactions array. Each split has: id, merchant, category, amount, notes.
+
+    Example response structure:
+        {
+          "getTransaction": {
+            "id": "txn_123",
+            "amount": -50.00,
+            "category": {"id": "cat_001", "name": "Groceries"},
+            "merchant": {"id": "m_001", "name": "Supermarket"},
+            "splitTransactions": [
+              {"id": "split_1", "merchant": {"name": "Corner Deli"}, "category": {"id": "cat_002", "name": "Dining"}, "amount": -30.00, "notes": ""},
+              {"id": "split_2", "merchant": {"name": "Bakery"}, "category": {"id": "cat_003", "name": "Groceries"}, "amount": -20.00, "notes": "bread"}
+            ]
+          }
+        }
+    """
+    await ensure_authenticated()
+
+    try:
+        result = await asyncio.wait_for(
+            api_call_with_retry("get_transaction_splits", transaction_id=transaction_id),
+            timeout=30.0,
+        )
+        result = convert_dates_to_strings(result)
+        return json.dumps(result, indent=2)
+    except asyncio.TimeoutError as e:
+        log.error("get_transaction_splits_timeout", transaction_id=transaction_id)
+        raise ValueError("Request timed out after 30 seconds. Please try again.") from e
+    except Exception as e:
+        log.error("get_transaction_splits_failed", transaction_id=transaction_id, error=str(e))
+        raise
+
+
+@mcp.tool(annotations=WRITE_IDEMPOTENT)
+@track_usage
+async def split_transaction(transaction_id: str, split_data: str) -> str:
+    """Split a transaction into multiple parts with different merchants and categories.
+
+    Replaces ALL existing splits for the transaction with the provided splits.
+    Pass an empty array to remove all splits.
+
+    Args:
+        transaction_id: ID of the parent transaction to split
+        split_data: JSON string containing a list of split objects. Each split requires:
+            - merchantName (str): Merchant name for this split portion
+            - amount (float): Amount for this split (must match sign of parent transaction)
+            - categoryId (str): Category ID to assign to this split
+            - notes (str, optional): Notes/memo for this split
+
+            The sum of all split amounts must exactly equal the parent transaction amount.
+            Pass "[]" to remove all splits from the transaction.
+
+    Returns:
+        JSON string with the updated transaction including hasSplitTransactions flag
+        and the new splitTransactions array.
+
+    Examples:
+        Split a -50.00 dining charge two ways:
+            split_data = '[
+                {"merchantName": "Corner Deli", "amount": -30.00, "categoryId": "cat_001"},
+                {"merchantName": "Bakery", "amount": -20.00, "categoryId": "cat_002", "notes": "bread"}
+            ]'
+
+        Remove all splits from a transaction:
+            split_data = "[]"
+
+    Notes:
+        - This operation is idempotent: calling with the same split_data produces the same result
+        - Existing splits are fully replaced, not merged
+        - Use get_transaction_categories to find valid category IDs
+        - Use get_transaction_splits to view current splits before modifying
+    """
+    await ensure_authenticated()
+
+    try:
+        # Parse the JSON string
+        try:
+            splits_list: Any = json.loads(split_data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in split_data parameter: {e}") from e
+
+        if not isinstance(splits_list, list):
+            raise ValueError("split_data must be a JSON array (list), not an object or scalar")
+
+        # Empty list = delete all splits
+        if len(splits_list) == 0:
+            result = await asyncio.wait_for(
+                api_call_with_retry("update_transaction_splits", transaction_id=transaction_id, split_data=[]),
+                timeout=30.0,
+            )
+            result = convert_dates_to_strings(result)
+            log.info("split_transaction_cleared", transaction_id=transaction_id)
+            return json.dumps(result, indent=2)
+
+        # Validate required fields on each split
+        required_fields = {"merchantName", "amount", "categoryId"}
+        for i, split in enumerate(splits_list):
+            missing = required_fields - set(split.keys())
+            if missing:
+                raise ValueError(f"Split at index {i} is missing required fields: {sorted(missing)}")
+            if not isinstance(split["amount"], (int, float)):
+                raise ValueError(f"Split at index {i} has invalid amount: must be a number")
+
+        # Validate that split amounts sum to the parent transaction amount
+        parent_result = await asyncio.wait_for(
+            api_call_with_retry("get_transaction_splits", transaction_id=transaction_id),
+            timeout=30.0,
+        )
+        parent_amount: float | None = parent_result.get("getTransaction", {}).get("amount", None)
+        if parent_amount is None:
+            raise ValueError(f"Could not retrieve parent transaction amount for transaction {transaction_id}")
+
+        split_sum = sum(float(s["amount"]) for s in splits_list)
+        if abs(parent_amount - split_sum) > 0.01:
+            raise ValueError(
+                f"Split amounts sum to {split_sum:.2f} but parent transaction amount is {parent_amount:.2f}. "
+                "The sum of all split amounts must equal the parent transaction amount."
+            )
+
+        log.info("split_transaction", transaction_id=transaction_id, split_count=len(splits_list))
+
+        result = await asyncio.wait_for(
+            api_call_with_retry("update_transaction_splits", transaction_id=transaction_id, split_data=splits_list),
+            timeout=30.0,
+        )
+        result = convert_dates_to_strings(result)
+        return json.dumps(result, indent=2)
+
+    except asyncio.TimeoutError as e:
+        log.error("split_transaction_timeout", transaction_id=transaction_id)
+        raise ValueError("Request timed out after 30 seconds. Please try again.") from e
+    except ValueError:
+        raise
+    except Exception as e:
+        log.error("split_transaction_failed", transaction_id=transaction_id, error=str(e))
+        raise
+
+
+@mcp.tool(annotations=READONLY)
+@track_usage
 async def get_account_holdings() -> str:
     """Get investment portfolio data from brokerage accounts."""
     await ensure_authenticated()
