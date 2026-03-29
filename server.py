@@ -36,6 +36,7 @@ WRITE_CREATE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempo
 WRITE_SIDE_EFFECT = ToolAnnotations(
     readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
 )
+WRITE_DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False)
 
 
 def parse_flexible_date(date_input: str) -> date:
@@ -1300,6 +1301,117 @@ async def get_transaction_categories(verbose: bool = False) -> str:
     return json.dumps(categories, indent=2)
 
 
+@mcp.tool(annotations=READONLY)
+@track_usage
+async def get_transaction_tags() -> str:
+    """List all transaction tags configured in the household.
+
+    Returns:
+        JSON string with list of tag objects, each containing:
+            - id: Tag identifier (use with set_transaction_tags or for filtering)
+            - name: Tag display name
+            - color: Hex color code (e.g., "#19D2A5")
+            - order: Display order
+            - transactionCount: Number of transactions using this tag
+    """
+    await ensure_authenticated()
+
+    try:
+        result = await asyncio.wait_for(
+            api_call_with_retry("get_transaction_tags"),
+            timeout=30.0,
+        )
+        result = convert_dates_to_strings(result)
+        return json.dumps(result, indent=2)
+    except asyncio.TimeoutError as e:
+        log.error("get_transaction_tags_timeout")
+        raise ValueError("Getting transaction tags timed out after 30 seconds.") from e
+    except Exception as e:
+        log.error("get_transaction_tags_failed", error=str(e))
+        raise
+
+
+@mcp.tool(annotations=WRITE_CREATE)
+@track_usage
+async def create_transaction_tag(name: str, color: str) -> str:
+    """Create a new transaction tag.
+
+    Args:
+        name: Display name for the tag (e.g., "Vacation", "Tax Deductible")
+        color: Hex color code including leading '#' (e.g., "#19D2A5", "#FF5733")
+
+    Returns:
+        JSON string with created tag details (id, name, color, order, transactionCount)
+    """
+    await ensure_authenticated()
+
+    if not name or name.strip() == "":
+        raise ValueError("Tag name cannot be empty")
+
+    if not re.match(r"^#[0-9a-fA-F]{6}$", color):
+        raise ValueError(f"Invalid color format '{color}'. Use 6-digit hex with '#' prefix (e.g., '#19D2A5')")
+
+    try:
+        log.info("creating_transaction_tag", name=name, color=color)
+        result = await asyncio.wait_for(
+            api_call_with_retry("create_transaction_tag", name=name, color=color),
+            timeout=30.0,
+        )
+        result = convert_dates_to_strings(result)
+        return json.dumps(result, indent=2)
+    except asyncio.TimeoutError as e:
+        log.error("create_transaction_tag_timeout")
+        raise ValueError("Creating transaction tag timed out after 30 seconds.") from e
+    except ValueError:
+        raise
+    except Exception as e:
+        log.error("create_transaction_tag_failed", error=str(e))
+        raise
+
+
+@mcp.tool(annotations=WRITE_IDEMPOTENT)
+@track_usage
+async def set_transaction_tags(transaction_id: str, tag_ids: str) -> str:
+    """Set tags on a transaction. Overwrites any existing tags.
+
+    To remove all tags, pass an empty string for tag_ids.
+    Use get_transaction_tags to find available tag IDs.
+
+    Args:
+        transaction_id: ID of the transaction to tag
+        tag_ids: Comma-separated tag IDs to set (e.g., "tag1,tag2"). Empty string removes all tags.
+
+    Returns:
+        JSON string with updated transaction tag information
+    """
+    await ensure_authenticated()
+
+    if not transaction_id or transaction_id.strip() == "":
+        raise ValueError("transaction_id cannot be empty")
+
+    # Parse comma-separated tag IDs (empty string = empty list = remove all tags)
+    parsed_tag_ids = [t.strip() for t in tag_ids.split(",") if t.strip()] if tag_ids.strip() else []
+
+    try:
+        log.info("setting_transaction_tags", transaction_id=transaction_id, tag_count=len(parsed_tag_ids))
+        result = await asyncio.wait_for(
+            api_call_with_retry(
+                "set_transaction_tags",
+                transaction_id=transaction_id,
+                tag_ids=parsed_tag_ids,
+            ),
+            timeout=30.0,
+        )
+        result = convert_dates_to_strings(result)
+        return json.dumps(result, indent=2)
+    except asyncio.TimeoutError as e:
+        log.error("set_transaction_tags_timeout")
+        raise ValueError("Setting transaction tags timed out after 30 seconds.") from e
+    except Exception as e:
+        log.error("set_transaction_tags_failed", error=str(e))
+        raise
+
+
 @mcp.tool(annotations=WRITE_CREATE)
 @track_usage
 async def create_transaction(
@@ -1310,6 +1422,7 @@ async def create_transaction(
     category_id: str,
     notes: str | None = None,
     update_balance: bool = False,
+    tag_ids: str | None = None,
 ) -> str:
     """Create a new manual transaction.
 
@@ -1323,6 +1436,8 @@ async def create_transaction(
         update_balance: Whether to update account balance when creating this transaction (default: False)
             - False: Transaction is recorded but doesn't affect account balance (typical for synced accounts)
             - True: Adjusts account balance by transaction amount (useful for manual accounts)
+        tag_ids: Optional comma-separated tag IDs to apply after creation (e.g., "tag1,tag2").
+            Use get_transaction_tags to find available tag IDs.
 
     Returns:
         JSON string with created transaction details
@@ -1360,6 +1475,28 @@ async def create_transaction(
             timeout=30.0,  # 30 second timeout
         )
         result = convert_dates_to_strings(result)
+
+        # Apply tags if provided (two-step: create, then set tags)
+        if tag_ids:
+            parsed_tag_ids = [t.strip() for t in tag_ids.split(",") if t.strip()]
+            if parsed_tag_ids:
+                try:
+                    txn_id = result.get("createTransaction", {}).get("transaction", {}).get("id")
+                    if txn_id:
+                        await asyncio.wait_for(
+                            api_call_with_retry(
+                                "set_transaction_tags",
+                                transaction_id=txn_id,
+                                tag_ids=parsed_tag_ids,
+                            ),
+                            timeout=30.0,
+                        )
+                        log.info("transaction_tags_applied", transaction_id=txn_id, tag_count=len(parsed_tag_ids))
+                    else:
+                        log.warning("create_transaction_no_id_for_tags", result_keys=list(result.keys()))
+                except Exception as tag_err:
+                    log.warning("create_transaction_tag_application_failed", error=str(tag_err))
+
         return json.dumps(result, indent=2)
     except asyncio.TimeoutError as e:
         log.error("create_transaction_timeout")
@@ -1383,6 +1520,7 @@ async def update_transaction(
     goal_id: str | None = None,
     hide_from_reports: bool | None = None,
     needs_review: bool | None = None,
+    tag_ids: str | None = None,
 ) -> str:
     """Update an existing transaction.
 
@@ -1406,6 +1544,9 @@ async def update_transaction(
             - Use empty string "" to clear goal association
         hide_from_reports: Whether to hide this transaction from reports/analytics
         needs_review: Flag transaction as needing review
+        tag_ids: Optional comma-separated tag IDs to set on the transaction (e.g., "tag1,tag2").
+            Use empty string "" to remove all tags. Use get_transaction_tags to find available tag IDs.
+            Overwrites existing tags (not additive).
 
     Field Editability:
         Editable Fields (can be updated):
@@ -1436,6 +1577,8 @@ async def update_transaction(
         - Recategorize: category_id="cat_groceries_123"
         - Mark for review: needs_review=True
         - Clear notes: notes=""
+        - Set tags: tag_ids="tag1,tag2"
+        - Remove all tags: tag_ids=""
     """
     await ensure_authenticated()
 
@@ -1473,6 +1616,23 @@ async def update_transaction(
             timeout=30.0,  # 30 second timeout
         )
         result = convert_dates_to_strings(result)
+
+        # Apply tags if provided (separate API call)
+        if tag_ids is not None:
+            parsed_tag_ids = [t.strip() for t in tag_ids.split(",") if t.strip()] if tag_ids.strip() else []
+            try:
+                await asyncio.wait_for(
+                    api_call_with_retry(
+                        "set_transaction_tags",
+                        transaction_id=transaction_id,
+                        tag_ids=parsed_tag_ids,
+                    ),
+                    timeout=30.0,
+                )
+                log.info("transaction_tags_updated", transaction_id=transaction_id, tag_count=len(parsed_tag_ids))
+            except Exception as tag_err:
+                log.warning("update_transaction_tag_application_failed", error=str(tag_err))
+
         return json.dumps(result, indent=2)
     except asyncio.TimeoutError as e:
         log.error("update_transaction_timeout", transaction_id=transaction_id)
@@ -1485,6 +1645,43 @@ async def update_transaction(
         raise
     except Exception as e:
         log.error("update_transaction_failed", transaction_id=transaction_id, error=str(e))
+        raise
+
+
+@mcp.tool(annotations=WRITE_DESTRUCTIVE)
+@track_usage
+async def delete_transaction(transaction_id: str) -> str:
+    """Delete a transaction permanently.
+
+    Args:
+        transaction_id: ID of the transaction to delete (required).
+            Use get_transactions or search_transactions to find transaction IDs.
+
+    Returns:
+        JSON string confirming deletion with the transaction ID
+    """
+    await ensure_authenticated()
+
+    try:
+        if not transaction_id or transaction_id.strip() == "":
+            raise ValueError("transaction_id cannot be empty")
+
+        log.info("deleting_transaction", transaction_id=transaction_id)
+
+        await asyncio.wait_for(
+            api_call_with_retry("delete_transaction", transaction_id=transaction_id),
+            timeout=30.0,
+        )
+
+        log.info("transaction_deleted", transaction_id=transaction_id)
+        return json.dumps({"deleted": True, "transaction_id": transaction_id}, indent=2)
+    except asyncio.TimeoutError as e:
+        log.error("delete_transaction_timeout", transaction_id=transaction_id)
+        raise ValueError("Transaction deletion timed out after 30 seconds. Please try again.") from e
+    except ValueError:
+        raise
+    except Exception as e:
+        log.error("delete_transaction_failed", transaction_id=transaction_id, error=str(e))
         raise
 
 
@@ -1507,10 +1704,11 @@ async def update_transactions_bulk(updates: str) -> str:
             - goal_id (optional): Goal ID or empty string to clear
             - hide_from_reports (optional): Boolean visibility flag
             - needs_review (optional): Boolean review flag
+            - tag_ids (optional): Comma-separated tag IDs to set (e.g., "tag1,tag2"). Empty string removes all tags.
 
     Example:
         [
-            {"transaction_id": "123", "category_id": "cat_456", "notes": "Updated"},
+            {"transaction_id": "123", "category_id": "cat_456", "tag_ids": "tag1,tag2"},
             {"transaction_id": "789", "merchant_name": "Starbucks", "needs_review": false}
         ]
 
@@ -1570,8 +1768,24 @@ async def update_transactions_bulk(updates: str) -> str:
                 # Execute update with timeout
                 await asyncio.wait_for(api_call_with_retry("update_transaction", **update_params), timeout=30.0)
 
-                # Compact success response: just confirm the update succeeded
-                return {"transaction_id": txn_id, "status": "success"}
+                # Apply tags if provided (separate API call)
+                result: dict[str, Any] = {"transaction_id": txn_id, "status": "success"}
+                if "tag_ids" in update_data:
+                    tag_str = str(update_data["tag_ids"])
+                    parsed_tag_ids = [t.strip() for t in tag_str.split(",") if t.strip()] if tag_str.strip() else []
+                    try:
+                        await asyncio.wait_for(
+                            api_call_with_retry(
+                                "set_transaction_tags",
+                                transaction_id=txn_id,
+                                tag_ids=parsed_tag_ids,
+                            ),
+                            timeout=30.0,
+                        )
+                    except Exception as tag_err:
+                        result["tag_error"] = str(tag_err)
+
+                return result
 
             except asyncio.TimeoutError:
                 return {

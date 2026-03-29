@@ -233,6 +233,76 @@ class TestBulkTransactionUpdates:
             assert execution_order.index("start_txn_2") < execution_order.index("end_txn_1")
 
 
+class TestBulkUpdateTags:
+    """Test tag support in bulk transaction updates."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_with_tags(self):
+        """Test bulk update applies tags to transactions."""
+        from server import update_transactions_bulk
+
+        mock_client = MagicMock()
+        mock_client.update_transaction = AsyncMock(return_value={"id": "txn_123", "updated": True})
+        mock_client.set_transaction_tags = AsyncMock(
+            return_value={"setTransactionTags": {"transaction": {"id": "txn_123"}}}
+        )
+
+        updates_json = json.dumps([{"transaction_id": "txn_123", "notes": "Tagged", "tag_ids": "tag1,tag2"}])
+
+        with patch("server.mm_client", mock_client), patch("server.ensure_authenticated", new_callable=AsyncMock):
+            result_str = await update_transactions_bulk(updates_json)
+            result = json.loads(result_str)
+
+            assert result["results"][0]["status"] == "success"
+            assert "tag_error" not in result["results"][0]
+
+            mock_client.set_transaction_tags.assert_called_once()
+            tag_call = mock_client.set_transaction_tags.call_args
+            assert tag_call.kwargs["transaction_id"] == "txn_123"
+            assert tag_call.kwargs["tag_ids"] == ["tag1", "tag2"]
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_with_tags_partial_failure(self):
+        """Test bulk update where tag setting fails but update succeeds."""
+        from server import update_transactions_bulk
+
+        mock_client = MagicMock()
+        mock_client.update_transaction = AsyncMock(return_value={"id": "txn_123", "updated": True})
+        mock_client.set_transaction_tags = AsyncMock(side_effect=Exception("Tag API error"))
+
+        updates_json = json.dumps([{"transaction_id": "txn_123", "tag_ids": "tag1"}])
+
+        with patch("server.mm_client", mock_client), patch("server.ensure_authenticated", new_callable=AsyncMock):
+            result_str = await update_transactions_bulk(updates_json)
+            result = json.loads(result_str)
+
+            # Update still succeeds
+            assert result["summary"]["succeeded"] == 1
+            assert result["results"][0]["status"] == "success"
+            # But tag_error is reported
+            assert "tag_error" in result["results"][0]
+            assert "Tag API error" in result["results"][0]["tag_error"]
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_with_tags_remove_all(self):
+        """Test bulk update with empty tag_ids removes all tags."""
+        from server import update_transactions_bulk
+
+        mock_client = MagicMock()
+        mock_client.update_transaction = AsyncMock(return_value={"id": "txn_123", "updated": True})
+        mock_client.set_transaction_tags = AsyncMock(
+            return_value={"setTransactionTags": {"transaction": {"id": "txn_123"}}}
+        )
+
+        updates_json = json.dumps([{"transaction_id": "txn_123", "tag_ids": ""}])
+
+        with patch("server.mm_client", mock_client), patch("server.ensure_authenticated", new_callable=AsyncMock):
+            await update_transactions_bulk(updates_json)
+
+            tag_call = mock_client.set_transaction_tags.call_args
+            assert tag_call.kwargs["tag_ids"] == []
+
+
 class TestBulkUpdatePerformance:
     """Test performance characteristics of bulk updates."""
 

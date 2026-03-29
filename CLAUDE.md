@@ -171,9 +171,10 @@ refactor: split server.py into modular components (auth, tools, models)
 - Structured logging with `structlog` for debugging
 - Environment variables: `MONARCH_EMAIL`, `MONARCH_PASSWORD`, `MONARCH_MFA_SECRET`
 
-**Complete Monarch Money API Coverage (24 Tools)**
+**Complete Monarch Money API Coverage (27 Tools)**
 - **Core**: `get_accounts`, `get_transactions`, `get_budgets`, `get_cashflow`
 - **Categories**: `get_transaction_categories`
+- **Tags**: `get_transaction_tags`, `create_transaction_tag`, `set_transaction_tags`
 - **Transactions**: `create_transaction`, `update_transaction`, `update_transactions_bulk`, `search_transactions`, `get_transaction_splits`, `split_transaction`
 - **Investments**: `get_account_holdings`, `get_account_history`
 - **Banking**: `get_institutions`, `refresh_accounts`
@@ -400,7 +401,7 @@ Server runs as MCP server configured in `.mcp.json` with:
 5. **Phase 5 (Intelligence)**: ML features, advanced analytics, financial insights
 6. **Phase 6 (Ecosystem)**: MCP extensions, developer tools, architectural improvements
 
-**Current Status** (Updated March 2026): Production-ready with 24 intelligent tools, comprehensive analytics, robust error handling, and enhanced reliability. Recent additions: `get_transaction_splits` and `split_transaction` tools for full split transaction support (read and create/update/delete splits). Previous features: `update_transactions_bulk()` for parallel batch updates, `search_transactions` tool for efficient context-aware search. Server is stable and ready for real-world usage with excellent user experience for date filtering, bulk operations, split transactions, and error recovery.
+**Current Status** (Updated March 2026): Production-ready with 27 intelligent tools, comprehensive analytics, robust error handling, and enhanced reliability. Recent additions: `get_transaction_tags`, `create_transaction_tag`, and `set_transaction_tags` tools for full tag management (list, create, assign/remove tags on transactions). `create_transaction` now supports optional `tag_ids` parameter. Previous features: split transactions, bulk updates, context-aware search. Server is stable and ready for real-world usage with excellent user experience for date filtering, bulk operations, split transactions, tags, and error recovery.
 
 ## Documentation References
 

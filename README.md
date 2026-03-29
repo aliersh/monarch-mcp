@@ -9,7 +9,7 @@ Built with the [MonarchMoney](https://github.com/hammem/monarchmoney) Python lib
 
 ## Features
 
-- **19 tools** covering accounts, transactions, budgets, cashflow, investments, categories, goals, net worth, recurring transactions, and more
+- **28 tools** covering accounts, transactions, budgets, cashflow, investments, categories, tags, splits, goals, net worth, recurring transactions, and more
 - **MCP resources** for quick access to categories, accounts, and institutions
 - **MCP prompts** for guided financial analysis workflows
 - **Smart output formatting** — compact transaction format reduces token usage by ~80%
@@ -72,6 +72,7 @@ Use absolute paths — find yours with `which uv` and `pwd`.
 | `get_transaction_categories` | Category list (compact by default) |
 | `create_transaction` | Create a manual transaction |
 | `update_transaction` | Update a single transaction |
+| `delete_transaction` | Delete a transaction permanently |
 | `update_transactions_bulk` | Update multiple transactions in parallel |
 | `get_budgets` | Budget data and spending analysis |
 | `get_cashflow` | Income and expense analysis |
@@ -84,6 +85,13 @@ Use absolute paths — find yours with `which uv` and `pwd`.
 | `refresh_accounts` | Trigger account data refresh |
 | `get_complete_financial_overview` | Combined 5-API call in parallel |
 | `analyze_spending_patterns` | Multi-month trend analysis |
+| `get_transaction_tags` | List all transaction tags |
+| `create_transaction_tag` | Create a new tag |
+| `set_transaction_tags` | Assign or remove tags on a transaction |
+| `get_transaction_splits` | Get split details for a transaction |
+| `split_transaction` | Split a transaction into parts |
+| `get_transactions_batch` | Parallel multi-account transaction queries |
+| `get_spending_summary` | Spending grouped by category/account/month |
 | `get_usage_analytics` | Tool usage stats and optimization tips |
 
 ### Transaction format
@@ -166,5 +174,5 @@ uv run scripts/eval_session.py analyze            # analyze new entries
 
 ## Credits
 
-This project started as a fork of [colvint/monarch-money-mcp](https://github.com/colvint/monarch-money-mcp) by [@colvint](https://github.com/colvint). Thanks for the original implementation!
+This fork builds on [jamiew/monarch-mcp](https://github.com/jamiew/monarch-mcp) by [@jamiew](https://github.com/jamiew), which itself started as a fork of [colvint/monarch-money-mcp](https://github.com/colvint/monarch-money-mcp) by [@colvint](https://github.com/colvint). Thanks to both for the foundation — this fork extends the server with additional tools (tags, splits, bulk updates, delete, search, batch operations) and enhanced error handling.
 
